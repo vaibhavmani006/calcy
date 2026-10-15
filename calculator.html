@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Calculator</title>
+  <style>
+    :root { font-family: Arial, Helvetica, sans-serif; color: #050505; background: #f8f8f8; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; min-height: 100dvh; background: #f8f8f8; }
+    .calculator { min-height: 100dvh; width: 100%; padding: max(24px, env(safe-area-inset-top)) 7vw max(22px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
+    .tools { height: 54px; display: flex; align-items: center; gap: 24px; font-size: 1.9rem; color: #2b2b2b; }
+    .tools span { font-size: 1.55rem; transform: rotate(-18deg); }
+    .screen { flex: 1; min-height: 220px; padding: 28px 0 12px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; overflow: hidden; }
+    #expression { width: 100%; min-height: 1.2em; text-align: right; font-size: clamp(1.55rem, 7.5vw, 3.2rem); line-height: 1.2; letter-spacing: .01em; overflow-wrap: anywhere; }
+    #result { width: 100%; min-height: 1.2em; margin-top: 7px; text-align: right; color: #6e6e6e; font-size: clamp(1.45rem, 6vw, 2.65rem); line-height: 1.15; overflow-wrap: anywhere; }
+    .skipped { color: #9a9a9a; text-decoration: line-through; text-decoration-thickness: 2px; }
+    .keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(14px, 4.2vw, 30px); width: min(100%, 680px); align-self: center; }
+    button { aspect-ratio: 1; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px #0000000b; color: #050505; font-size: clamp(2rem, 8.4vw, 4rem); font-weight: 400; cursor: pointer; transition: transform .12s ease, background .12s ease; }
+    button:active { transform: scale(.91); background: #ebebeb; }
+    .blue { color: #1674f5; font-weight: 500; } .clear { color: #f15330; }
+    .equals { background: #1674f5; color: #fff; font-weight: 500; } .equals:active { background: #0f61d4; }
+    @media (min-width: 700px) { .calculator { max-width: 780px; margin: auto; padding-inline: 50px; } .tools { opacity: .7; } }
+  </style>
+</head>
+<body>
+  <main class="calculator" aria-label="Calculator">
+    <div class="tools" aria-hidden="true">▢ <span>◷</span><span>↻</span></div>
+    <section class="screen" aria-live="polite"><div id="expression"></div><div id="result">0</div></section>
+    <section class="keys" id="keys">
+      <button class="clear" data-action="clear">C</button><button class="blue" data-action="percent">%</button><button class="blue" data-action="backspace">⌫</button><button class="blue" data-value="/">÷</button>
+      <button data-value="7">7</button><button data-value="8">8</button><button data-value="9">9</button><button class="blue" data-value="*">×</button>
+      <button data-value="4">4</button><button data-value="5">5</button><button data-value="6">6</button><button class="blue" data-value="-">−</button>
+      <button data-value="1">1</button><button data-value="2">2</button><button data-value="3">3</button><button class="blue" data-value="+">+</button>
+      <button class="blue" data-action="toggle-sign">±</button><button data-value="0">0</button><button data-value=".">.</button><button class="equals" data-action="equals">=</button>
+    </section>
+  </main>
+  <script>
+    const expression = document.querySelector('#expression');
+    const result = document.querySelector('#result');
+    let current = '0', accumulator = null, operator = null, waiting = false;
+    let doublePlus = false, skipping = false, parts = [], justAnswered = false;
+    const shownOperator = op => ({ '*': '×', '/': '÷', '-': '−' }[op] || op);
+    const clean = n => Number.isFinite(n) ? String(Number(n.toFixed(10))) : 'Error';
+    const compute = (a, b, op) => op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : op === '/' ? (b ? a / b : NaN) : a % b;
+    function render() {
+      const active = waiting ? '' : `<span${skipping ? ' class="skipped"' : ''}>${current}</span>`;
+      expression.innerHTML = [...parts, active].filter(Boolean).join(' ');
+      result.textContent = clean(accumulator ?? (waiting ? 0 : Number(current)));
+    }
+    function startFresh() { if (justAnswered) { current = '0'; accumulator = null; operator = null; waiting = false; doublePlus = false; skipping = false; parts = []; justAnswered = false; } }
+    function number(value) {
+      startFresh();
+      if (waiting) { current = value === '.' ? '0.' : value; waiting = false; skipping = doublePlus; doublePlus = false; }
+      else if (value === '.' && !current.includes('.')) current += '.';
+      else if (value !== '.') current = current === '0' ? value : current + value;
+      render();
+    }
+    function operation(next) {
+      if (next === '+' && operator === '+' && waiting) { doublePlus = true; render(); return; }
+      if (!waiting) {
+        const value = Number(current); parts.push(`<span${skipping ? ' class="skipped"' : ''}>${current}</span>`);
+        if (!skipping) accumulator = accumulator === null ? value : compute(accumulator, value, operator); skipping = false;
+      }
+      if (accumulator === null) accumulator = Number(current);
+      parts.push(shownOperator(next)); operator = next; waiting = true; doublePlus = false; justAnswered = false; render();
+    }
+    function equals() {
+      if (!waiting) { const value = Number(current); parts.push(`<span${skipping ? ' class="skipped"' : ''}>${current}</span>`); if (!skipping) accumulator = accumulator === null ? value : compute(accumulator, value, operator); }
+      current = clean(accumulator ?? Number(current)); result.textContent = current; expression.innerHTML = parts.join(' '); accumulator = null; operator = null; waiting = true; skipping = false; doublePlus = false; justAnswered = true;
+    }
+    function clear() { current = '0'; accumulator = null; operator = null; waiting = false; doublePlus = false; skipping = false; parts = []; justAnswered = false; render(); }
+    function percent() { if (!waiting) { current = clean(Number(current) / 100); render(); } }
+    function backspace() { if (!waiting) { current = current.length > 1 ? current.slice(0, -1) : '0'; render(); } }
+    document.querySelector('#keys').addEventListener('click', ({ target }) => {
+      const { value, action } = target.dataset; if (!value && !action) return;
+      if (value && '0123456789.'.includes(value)) number(value); else if (value && '+-*/'.includes(value)) operation(value);
+      else if (action === 'equals') equals(); else if (action === 'clear') clear(); else if (action === 'percent') percent(); else if (action === 'backspace') backspace();
+      else if (action === 'toggle-sign' && !waiting) { current = clean(-Number(current)); render(); }
+    });
+    window.addEventListener('keydown', e => { if ('0123456789.'.includes(e.key)) number(e.key); else if ('+-*/'.includes(e.key)) operation(e.key); else if (e.key === 'Enter' || e.key === '=') equals(); else if (e.key === 'Escape') clear(); else if (e.key === 'Backspace') backspace(); else if (e.key === '%') percent(); });
+    render();
+  </script>
+</body>
+</html>
